@@ -1,0 +1,8 @@
+open ftp.site.com
+username
+password
+lcd c:\localFolder
+cd /remoteFolder
+mget *.csv
+disconnect
+exit
