@@ -1,5 +1,5 @@
 # This is a script to import WorkOrder data from the IFS share on the iSeries to the WorkOrder table in SharePoint for the Production Workflow System.
-#  Version Control: 
+#  Change log: 
 #   v0.1. ESnow. 11/05/2016. Initial build.
 #   v0.2. ESnow. 12/05/2016. Added logging and checks for Z: drive mapping
 #   v0.3. ESnow. 12/05/2016. Added optional SQL credentials or Windows pass-thru by checking for the $dbUser variable
@@ -8,13 +8,19 @@
 #   v0.6. ESnow. 13/05/2016. Added as scheduled task on MDM-SERV
 #   v0.7. ESnow. 14/05/2016. Added switchable debug to log file feature
 #   v0.8. ESnow. 14/05/2016. Fixed bug when the first WO .csv wasn't getting processed correctly (added cd c:\ after each invoke-sqlcmd commandlet)
+#   v0.9. ESnow. 23/05/2016. Enabled pre-connection to database to fix bug where files were processed but not added to the database.
+#   v1.0. ESnow. 27/05/2016. Changed database to the live DB on SPS-SERV
+
+#  NOTES: ESnow. 23/05/2016. I've found that if the processed files in the temp directory are added to the database, they aren't moved to the archive folder immediatly after.
+#                            Instead, they are moved at the next time the script is processed. This can make deciphering the logs a little confusing but with the checks that 
+#                            are in place, the file isn't added to the DB table again and is moved/deleted as expected at the next scheduled task window.
 
 
 # ================================================ SET SCRIPT VARIABLES ======================================================================
 
 $debug = 1                    # 1 = on 0 = off
-$dbServer = "sg-minidb"
-$db = "PWS_Test"
+$dbServer = "sps-serv"
+$db = "ProdManagementSystem"
 $dbPass = ""                  # Only required if using SQL Logins
 $dbUser = ""                  # Only required if using SQL Logins
 $dbTable = "dbo.WorkOrders"
@@ -76,7 +82,23 @@ if (!(Test-Path $sourceWorkOrdersPath)) {
 
 # Create connection to the database. ##################################################################################################
 
-#$dbConnect = Invoke-Sqlcmd -Query "SELECT TOP 2 * FROM dbo.WorkOrders" -server $dbServer -Database $db
+$dbConnect = Invoke-Sqlcmd -Query "SELECT TOP 2 * FROM dbo.WorkOrders" -server $dbServer -Database $db
+
+if ($debug -eq 1) {
+
+    if ($dbConnect) {
+
+        add-content -Path $logFile -Value "$date - DEBUG   - Connected to the database"
+
+    } else {
+
+        add-content -Path $logFile -Value "$date - DEBUG   - Nothing found in database! Check connection"
+
+    }
+
+} 
+
+cd c:\
 
 # ================================================ DATA INPUT INTO THE DB ====================================================================
 
@@ -263,7 +285,7 @@ foreach ($wo in $sourceWorkOrders) {
 
         try {
 
-            Move-Item -Path $wo -Destination $workOrderArchive
+            Move-Item -Path $wo -Destination $workOrderArchive -Force
             $date = get-date -format "dd/MM/yyyy HH:mm:ss"
             add-content -Path $logFile -Value "$date - INFO    - Moved WorkOrder File: '$wo' to archive - $workOrderArchive"
 
@@ -279,5 +301,7 @@ foreach ($wo in $sourceWorkOrders) {
     cd c:\
 
 }
+
+Add-Content -Path $logFile -Value "------------------------------------------------------------------------------"
 
 exit
